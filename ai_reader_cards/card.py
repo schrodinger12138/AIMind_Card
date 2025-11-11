@@ -39,7 +39,7 @@ class ConnectionPoint(QGraphicsRectItem):
 class CardEditDialog(QDialog):
     """卡片编辑对话框"""
     # ... 保持原有代码不变 ...
-
+    pass
 
 class KnowledgeCard(QGraphicsRectItem):
     """知识卡片 - 可拖动、可编辑的卡片"""

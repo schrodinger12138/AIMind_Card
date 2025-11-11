@@ -1,0 +1,13 @@
+openai
+anthropic
+PyQt6
+pyqt6_sip
+pyperclip
+PyMuPDF
+genanki
+Pillow
+numpy
+streamlit
+streamlit-drawable-canvas
+utils
+xmind

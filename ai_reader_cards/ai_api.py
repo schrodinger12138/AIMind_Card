@@ -36,15 +36,15 @@ class AICardGenerator:
             dict: 包含title, question, answer的字典
         """
         prompt = f"""请把下面的文本提炼成一个学习卡片，返回JSON格式，包含以下字段：
-- title: 一句精简的标题（6-20字）
-- question: 一个考察该片段核心概念的问题
-- answer: 对问题的简洁回答（不超过150字）
-
-返回内容必须是严格的JSON对象，不要添加任何额外说明。
-
-文本内容：
-{text_content}
-"""
+        - title: 一句精简的标题（6-20字）
+        - question: 一个考察该片段核心概念的问题
+        - answer: 对问题的简洁回答（不超过150字）
+        
+        返回内容必须是严格的JSON对象，不要添加任何额外说明。
+        
+        文本内容：
+        {text_content}
+        """
         
         try:
             response = self.client.chat.completions.create(

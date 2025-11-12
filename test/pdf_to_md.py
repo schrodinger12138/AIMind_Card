@@ -39,7 +39,7 @@ def pdf_ocr(image):
         return ""
 
 if __name__ == '__main__':  
-    root_folder = r'E:\Users\anyon\Zotero\storage'  # 主文件夹路径
+    root_folder = r'C:\Users\anyon\Zotero\storage'  # 主文件夹路径
     today_date = datetime.date.today()
 
     # 遍历主文件夹下的所有子文件夹

@@ -116,3 +116,60 @@ class MindMapPanel(QWidget):
     def clear_drawings(self):
         """清除所有绘画"""
         self.mindmap_scene.clear_drawings()
+    
+    def apply_layout(self, layout_name):
+        """应用布局算法"""
+        from ai_reader_cards.layout_engine import LayoutEngine
+        from ai_reader_cards.tree_models import TreeNode
+        
+        cards = self.get_all_cards()
+        if not cards:
+            return
+        
+        # 找到根节点（没有父节点的卡片）
+        root_cards = [card for card in cards if not hasattr(card, 'parent_card') or card.parent_card is None]
+        if not root_cards:
+            # 如果没有根节点，使用第一个卡片作为根节点
+            root_card = cards[0]
+        else:
+            root_card = root_cards[0]
+        
+        # 将卡片结构转换为树结构
+        def card_to_tree(card, visited=None):
+            if visited is None:
+                visited = set()
+            if card in visited:
+                return None
+            visited.add(card)
+            
+            tree_node = TreeNode(card.title_text, card.pos().x(), card.pos().y())
+            tree_node.card_ref = card  # 保存卡片引用
+            
+            # 处理子卡片
+            if hasattr(card, 'child_cards') and card.child_cards:
+                for child_card in card.child_cards:
+                    child_tree = card_to_tree(child_card, visited)
+                    if child_tree:
+                        tree_node.add_child(child_tree)
+            
+            return tree_node
+        
+        root_tree = card_to_tree(root_card)
+        if not root_tree:
+            return
+        
+        # 应用布局算法
+        engine = LayoutEngine
+        layout_func = getattr(engine, layout_name, None)
+        if layout_func:
+            layout_func(root_tree)
+            
+            # 将布局结果应用回卡片
+            def apply_tree_to_cards(tree_node):
+                if hasattr(tree_node, 'card_ref'):
+                    tree_node.card_ref.setPos(tree_node.x, tree_node.y)
+                for child in tree_node.children:
+                    apply_tree_to_cards(child)
+            
+            apply_tree_to_cards(root_tree)
+            self.update_scene()

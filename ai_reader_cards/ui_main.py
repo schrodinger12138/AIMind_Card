@@ -2,6 +2,7 @@
 """重构后的主窗口 - 使用标准菜单栏和工具栏"""
 
 import sys
+import os
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSplitter, QStatusBar, QMessageBox
 from PyQt6.QtCore import Qt
 
@@ -149,6 +150,8 @@ class MainWindow(QMainWindow):
         self.main_toolbar.export_markdown_requested.connect(self._export_markdown)
         self.main_toolbar.export_xmind_requested.connect(self._export_xmind)
         self.main_toolbar.export_anki_requested.connect(self._export_to_anki)
+        self.main_toolbar.apply_layout_requested.connect(self._apply_layout)
+        self.main_toolbar.connection_style_changed.connect(self._change_connection_style)
 
         # 绘画工具栏
         self.drawing_toolbar.drawing_mode_toggled.connect(self.mindmap_panel.set_drawing_mode)
@@ -178,6 +181,7 @@ class MainWindow(QMainWindow):
         self.input_panel.file_opened.connect(self._open_file)
         self.input_panel.generate_card_requested.connect(self.controller.generate_card)
         self.input_panel.text_operation_requested.connect(self._handle_text_operation)
+        self.input_panel.pdf_dropped.connect(self._handle_pdf_drop)
 
         # 思维导图面板信号
         self.mindmap_panel.link_cards_requested.connect(self._link_selected_cards)
@@ -219,6 +223,118 @@ class MainWindow(QMainWindow):
             self.update_status(f"已打开文件: {filename}")
         except Exception as e:
             self._show_message(False, f"无法打开文件:\n{str(e)}")
+    
+    def _handle_pdf_drop(self, pdf_path):
+        """处理PDF拖拽"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox
+        
+        # 显示转换选项对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("PDF文件处理")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 提示信息
+        info_label = QLabel(f"检测到PDF文件:\n{pdf_path}\n\n请选择处理方式：")
+        layout.addWidget(info_label)
+        
+        # 转换选项
+        convert_checkbox = QCheckBox("转换为Markdown格式（使用OCR识别）")
+        convert_checkbox.setChecked(True)
+        layout.addWidget(convert_checkbox)
+        
+        direct_checkbox = QCheckBox("直接打开PDF（提取文本，不转换）")
+        layout.addWidget(direct_checkbox)
+        
+        # 按钮
+        button_layout = QHBoxLayout()
+        ok_btn = QPushButton("确定")
+        cancel_btn = QPushButton("取消")
+        
+        ok_btn.clicked.connect(dialog.accept)
+        cancel_btn.clicked.connect(dialog.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(ok_btn)
+        button_layout.addWidget(cancel_btn)
+        layout.addLayout(button_layout)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            if convert_checkbox.isChecked():
+                # 转换为Markdown
+                self._convert_pdf_to_markdown(pdf_path)
+            elif direct_checkbox.isChecked():
+                # 直接打开PDF
+                self._open_file(pdf_path, 'pdf')
+            else:
+                # 默认转换为Markdown
+                self._convert_pdf_to_markdown(pdf_path)
+    
+    def _convert_pdf_to_markdown(self, pdf_path):
+        """将PDF转换为Markdown"""
+        from PyQt6.QtWidgets import QProgressDialog
+        from PyQt6.QtCore import QThread, pyqtSignal
+        
+        class PDFConversionThread(QThread):
+            """PDF转换线程"""
+            progress = pyqtSignal(int, int, str)  # current, total, message
+            finished = pyqtSignal(str, str)  # content, filename
+            error = pyqtSignal(str)
+            
+            def __init__(self, pdf_path):
+                super().__init__()
+                self.pdf_path = pdf_path
+            
+            def run(self):
+                try:
+                    from ai_reader_cards.pdf_to_md import PDFToMarkdownConverter
+                    converter = PDFToMarkdownConverter()
+                    
+                    def progress_callback(current, total, message):
+                        self.progress.emit(current, total, message)
+                    
+                    content = converter.convert_pdf_to_markdown(
+                        self.pdf_path,
+                        progress_callback=progress_callback
+                    )
+                    
+                    filename = os.path.basename(self.pdf_path)
+                    self.finished.emit(content, filename)
+                except Exception as e:
+                    self.error.emit(str(e))
+        
+        # 创建进度对话框
+        progress_dialog = QProgressDialog("正在转换PDF...", "取消", 0, 100, self)
+        progress_dialog.setWindowTitle("PDF转Markdown")
+        progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progress_dialog.setAutoClose(True)
+        progress_dialog.setAutoReset(True)
+        
+        # 创建转换线程
+        thread = PDFConversionThread(pdf_path)
+        
+        def update_progress(current, total, message):
+            if total > 0:
+                progress = int((current / total) * 100)
+                progress_dialog.setValue(progress)
+                progress_dialog.setLabelText(message)
+        
+        def on_finished(content, filename):
+            progress_dialog.close()
+            self.input_panel.set_file_content(content, filename, 'markdown')
+            self.update_status(f"已转换PDF为Markdown: {filename}")
+        
+        def on_error(error_msg):
+            progress_dialog.close()
+            self._show_message(False, f"PDF转换失败:\n{error_msg}")
+        
+        thread.progress.connect(update_progress)
+        thread.finished.connect(on_finished)
+        thread.error.connect(on_error)
+        
+        thread.start()
+        progress_dialog.exec()
 
     def _save_cards(self):
         """保存卡片"""
@@ -331,13 +447,13 @@ class MainWindow(QMainWindow):
     # 编辑操作相关方法
     def _undo(self):
         """撤销"""
-        # TODO: 实现撤销功能
-        self.update_status("撤销功能待实现")
+        self.mindmap_panel.mindmap_scene.undo()
+        self.update_status("已撤销")
 
     def _redo(self):
         """重做"""
-        # TODO: 实现重做功能
-        self.update_status("重做功能待实现")
+        self.mindmap_panel.mindmap_scene.redo()
+        self.update_status("已重做")
 
     def _delete_selected(self):
         """删除选中项"""
@@ -602,6 +718,19 @@ class MainWindow(QMainWindow):
         self.mindmap_panel.clear_drawings()
         self.controller.card_id_counter = 0
         self.update_status("画布已清空")
+    
+    def _apply_layout(self):
+        """应用布局算法"""
+        layout_name = self.main_toolbar.layout_combo.currentText()
+        self.mindmap_panel.apply_layout(layout_name)
+        # 更新连线系统的布局类型
+        self.mindmap_panel.mindmap_scene.set_layout_type(layout_name)
+        self.update_status(f"已应用布局: {layout_name}")
+    
+    def _change_connection_style(self, style):
+        """切换连线样式"""
+        self.mindmap_panel.mindmap_scene.set_connection_style(style)
+        self.update_status(f"已切换连线样式: {style}")
 
     def _show_message(self, success, message):
         """显示消息"""

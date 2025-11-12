@@ -2,8 +2,9 @@
 """输入面板组件"""
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QTextEdit, QLabel, QMessageBox)
-from PyQt6.QtCore import pyqtSignal
+                             QPushButton, QTextEdit, QLabel, QMessageBox, QCheckBox)
+from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
 
 class InputPanel(QWidget):
@@ -12,6 +13,7 @@ class InputPanel(QWidget):
     file_opened = pyqtSignal(str, str)  # filepath, file_type
     generate_card_requested = pyqtSignal(str)
     text_operation_requested = pyqtSignal(str)  # copy, paste, cut, select_all
+    pdf_dropped = pyqtSignal(str)  # PDF文件路径
 
     def __init__(self):
         super().__init__()
@@ -48,16 +50,31 @@ class InputPanel(QWidget):
 
         layout.addLayout(title_layout)
 
-        # 文本显示和编辑区域
-        self.text_input = QTextEdit()
+        # 文本显示和编辑区域 - 使用Markdown查看器
+        try:
+            from ai_reader_cards.markdown_viewer import MarkdownViewer
+            self.text_input = MarkdownViewer()
+            self.is_markdown_mode = True
+        except ImportError:
+            # 如果导入失败，使用普通QTextEdit
+            self.text_input = QTextEdit()
+            self.is_markdown_mode = False
+        
         self.text_input.setPlaceholderText(
             "文件内容将显示在这里...\n\n"
             "支持的操作：\n"
-            "1. 打开文本文件(.txt)、PDF文件(.pdf)\n"
-            "2. 支持复制(Ctrl+C)、粘贴(Ctrl+V)、剪切(Ctrl+X)\n"
-            "3. 选中文本后按空格键快速生成卡片\n"
-            "4. 支持查找(Ctrl+F)、全选(Ctrl+A)"
+            "1. 拖拽PDF文件到此处，可选择转换为Markdown\n"
+            "2. 打开文本文件(.txt)、PDF文件(.pdf)\n"
+            "3. 支持复制(Ctrl+C)、粘贴(Ctrl+V)、剪切(Ctrl+X)\n"
+            "4. 选中文本后按空格键快速生成卡片\n"
+            "5. 支持查找(Ctrl+F)、全选(Ctrl+A)\n"
+            "6. 支持Markdown格式和数学公式显示"
         )
+        
+        # 启用拖拽
+        self.setAcceptDrops(True)
+        self.text_input.setAcceptDrops(True)
+        
         layout.addWidget(self.text_input)
 
         # 文本操作工具栏
@@ -113,31 +130,25 @@ class InputPanel(QWidget):
 
     def _generate_card_from_selection(self):
         """从选中文本生成卡片"""
-        cursor = self.text_input.textCursor()
-        if cursor.hasSelection():
-            # 使用选中文本
-            text = cursor.selectedText()
+        # 获取选中文本或全部文本
+        if hasattr(self.text_input, 'textCursor'):
+            cursor = self.text_input.textCursor()
+            if cursor.hasSelection():
+                text = cursor.selectedText()
+            else:
+                text = self.get_plain_text()[:1000]
         else:
-            # 如果没有选中文本，使用全部文本（限制长度）
-            text = self.text_input.toPlainText()[:1000]
-            if not text:
-                QMessageBox.warning(self, "提示", "请先打开文件或输入文本内容")
-                return
+            text = self.get_plain_text()[:1000]
+        
+        if not text:
+            QMessageBox.warning(self, "提示", "请先打开文件或输入文本内容")
+            return
 
         if len(text) < 10:
             QMessageBox.warning(self, "提示", "文本过短，请输入至少10个字符")
             return
 
         self.generate_card_requested.emit(text)
-
-    def set_file_content(self, content, filename, file_type):
-        """设置文件内容"""
-        self.text_input.setPlainText(content)
-        if file_type == 'pdf':
-            self.file_info_label.setText(f"PDF文件: {filename}")
-        else:
-            self.file_info_label.setText(f"文本文件: {filename}")
-        self.generate_btn.setEnabled(True)
 
     def enable_generate_button(self, enabled):
         """启用/禁用生成按钮"""
@@ -146,3 +157,51 @@ class InputPanel(QWidget):
     def get_text_input(self):
         """获取文本输入框"""
         return self.text_input
+    
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls and urls[0].toLocalFile().lower().endswith('.pdf'):
+                event.acceptProposedAction()
+                self.setStyleSheet("border: 2px dashed #0078d7; background-color: #e3f2fd;")
+    
+    def dragLeaveEvent(self, event):
+        """拖拽离开事件"""
+        self.setStyleSheet("")
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖拽释放事件"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            filepath = urls[0].toLocalFile()
+            if filepath.lower().endswith('.pdf'):
+                self.setStyleSheet("")
+                self.pdf_dropped.emit(filepath)
+                event.acceptProposedAction()
+            else:
+                event.ignore()
+    
+    def set_file_content(self, content, filename, file_type):
+        """设置文件内容"""
+        if self.is_markdown_mode and hasattr(self.text_input, 'set_markdown_content'):
+            self.text_input.set_markdown_content(content)
+        else:
+            self.text_input.setPlainText(content)
+        
+        if file_type == 'pdf':
+            self.file_info_label.setText(f"PDF文件: {filename}")
+        elif file_type == 'markdown':
+            self.file_info_label.setText(f"Markdown文件: {filename}")
+        else:
+            self.file_info_label.setText(f"文本文件: {filename}")
+        self.generate_btn.setEnabled(True)
+    
+    def get_plain_text(self):
+        """获取纯文本内容（用于生成卡片）"""
+        if hasattr(self.text_input, 'toPlainText'):
+            return self.text_input.toPlainText()
+        elif hasattr(self.text_input, 'document'):
+            return self.text_input.document().toPlainText()
+        else:
+            return ""

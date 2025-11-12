@@ -20,6 +20,13 @@ class MainToolbar(QToolBar):
     # 工具信号
     toggle_clipboard_monitor_requested = pyqtSignal(bool)
     clear_canvas_requested = pyqtSignal()
+    
+    # 布局相关信号
+    layout_changed = pyqtSignal(str)
+    apply_layout_requested = pyqtSignal()
+    
+    # 连线样式信号
+    connection_style_changed = pyqtSignal(str)
 
     # 导出信号
     export_markdown_requested = pyqtSignal()
@@ -75,6 +82,27 @@ class MainToolbar(QToolBar):
         clear_btn = QPushButton("🗑️ 清空")
         clear_btn.clicked.connect(self.clear_canvas_requested.emit)
         self.addWidget(clear_btn)
+
+        self.addSeparator()
+
+        # 布局选择
+        self.addWidget(QLabel("布局:"))
+        self.layout_combo = QComboBox()
+        self.layout_combo.addItems(["mind_map", "logical", "timeline", "fishbone", "auto_arrange"])
+        self.layout_combo.currentTextChanged.connect(self.layout_changed.emit)
+        self.addWidget(self.layout_combo)
+        
+        apply_layout_btn = QPushButton("📐 应用布局")
+        apply_layout_btn.clicked.connect(self.apply_layout_requested.emit)
+        self.addWidget(apply_layout_btn)
+        
+        # 连线样式选择
+        self.addWidget(QLabel("连线:"))
+        self.connection_combo = QComboBox()
+        self.connection_combo.addItems(["fixed", "bezier", "smart", "gradient", "default"])
+        self.connection_combo.setCurrentText("fixed")  # 默认固定长度
+        self.connection_combo.currentTextChanged.connect(self.connection_style_changed.emit)
+        self.addWidget(self.connection_combo)
 
         self.addSeparator()
 

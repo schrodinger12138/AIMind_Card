@@ -3,6 +3,7 @@
 import xmind
 from xmind.core.const import TOPIC_DETACHED
 from xmind.core.markerref import MarkerId
+from typing import List, Dict
 
 from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView
 from PyQt6.QtCore import Qt, QPointF, QRectF, pyqtSignal
@@ -298,6 +299,20 @@ class MindMapScene(QGraphicsScene):
         # 修复：正确初始化工具类
         self.alignment_tool = CardAlignmentTool()
         self.search_tool = CardSearchTool(self)
+        
+        # 复制粘贴相关
+        self.copied_cards = []
+        
+        # 连线样式
+        self.connection_style = "fixed"  # 默认固定长度连线
+        self.connection_manager = None
+        self.fixed_connection_manager = None
+        self.current_layout_type = "mind_map"  # 当前布局类型
+        
+        # 撤销/重做管理器
+        from ai_reader_cards.undo_manager import UndoManager
+        self.undo_manager = UndoManager()
+        # 不立即保存初始状态，等有卡片时再保存
 
     # 修复：添加缺失的方法
     def start_connection(self, from_card, from_direction, start_point):
@@ -415,15 +430,248 @@ class MindMapScene(QGraphicsScene):
 
         super().mouseReleaseEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        """空白处双击创建新节点"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # 检查是否点击在空白处（没有点击到任何卡片）
+            items = self.items(event.scenePos())
+            card_items = [item for item in items if isinstance(item, KnowledgeCard)]
+            
+            if not card_items:
+                # 在空白处创建新卡片
+                scene_pos = event.scenePos()
+                import uuid
+                from ai_reader_cards.card import KnowledgeCard
+                
+                new_card = KnowledgeCard(
+                    str(uuid.uuid4()),
+                    "新卡片",
+                    "问题内容",
+                    "答案内容",
+                    scene_pos.x(),
+                    scene_pos.y()
+                )
+                
+                # 保存状态用于撤销
+                self._save_state_for_undo("创建新卡片")
+                self.add_card(new_card)
+                self.update()
+                
+                # 设置新卡片为选中状态
+                self.clearSelection()
+                new_card.setSelected(True)
+                new_card.setFocus()
+                
+                event.accept()
+            else:
+                super().mouseDoubleClickEvent(event)
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        from PyQt6.QtGui import QKeyEvent
+        
+        if event.key() == Qt.Key.Key_Delete:
+            # Delete键 - 删除选中卡片
+            self._save_state_for_undo("删除卡片")
+            self.delete_selected_cards()
+            event.accept()
+        elif event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_A:
+                # Ctrl+A 全选
+                self.select_all_cards()
+                event.accept()
+            elif event.key() == Qt.Key.Key_C:
+                # Ctrl+C 复制
+                self.copy_selected_cards()
+                event.accept()
+            elif event.key() == Qt.Key.Key_X:
+                # Ctrl+X 剪切
+                self._save_state_for_undo("剪切卡片")
+                self.cut_selected_cards()
+                event.accept()
+            elif event.key() == Qt.Key.Key_V:
+                # Ctrl+V 粘贴
+                self._save_state_for_undo("粘贴卡片")
+                self.paste_cards()
+                event.accept()
+            elif event.key() == Qt.Key.Key_Z:
+                # Ctrl+Z 撤销
+                if not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                    self.undo()
+                    event.accept()
+                else:
+                    # Ctrl+Shift+Z 重做
+                    self.redo()
+                    event.accept()
+            elif event.key() == Qt.Key.Key_Y:
+                # Ctrl+Y 重做
+                self.redo()
+                event.accept()
+            else:
+                super().keyPressEvent(event)
+        else:
+            super().keyPressEvent(event)
+
+    def select_all_cards(self):
+        """选择所有卡片"""
+        for card in self.cards:
+            card.setSelected(True)
+
+    def copy_selected_cards(self):
+        """复制选中的卡片"""
+        selected_cards = self.get_selected_cards()
+        self.copied_cards = []
+        
+        for card in selected_cards:
+            # 保存卡片数据（简化版，只保存基本信息）
+            card_data = {
+                'title': card.title_text,
+                'question': card.question_text,
+                'answer': card.answer_text,
+                'x': card.pos().x(),
+                'y': card.pos().y()
+            }
+            self.copied_cards.append(card_data)
+        
+        print(f"已复制 {len(self.copied_cards)} 个卡片")
+
+    def paste_cards(self):
+        """粘贴卡片"""
+        if not self.copied_cards:
+            return
+        
+        from ai_reader_cards.card import KnowledgeCard
+        import uuid
+        
+        # 计算粘贴位置（稍微偏移）
+        paste_offset = 30
+        
+        for card_data in self.copied_cards:
+            # 创建新卡片
+            new_card = KnowledgeCard(
+                str(uuid.uuid4()),
+                card_data['title'],
+                card_data['question'],
+                card_data['answer'],
+                card_data['x'] + paste_offset,
+                card_data['y'] + paste_offset
+            )
+            self.add_card(new_card)
+        
+        self.update()
+        print(f"已粘贴 {len(self.copied_cards)} 个卡片")
+
+    def delete_selected_cards(self):
+        """删除选中的卡片"""
+        selected_cards = self.get_selected_cards()
+        for card in selected_cards:
+            self.remove_card(card)
+        self.update()
+    
+    def cut_selected_cards(self):
+        """剪切选中的卡片"""
+        selected_cards = self.get_selected_cards()
+        if not selected_cards:
+            return
+        
+        # 先复制
+        self.copy_selected_cards()
+        
+        # 然后删除
+        for card in selected_cards:
+            self.remove_card(card)
+        self.update()
+        print(f"已剪切 {len(selected_cards)} 个卡片")
+    
+    def _save_state_for_undo(self, action_name: str = ""):
+        """保存当前状态用于撤销"""
+        cards_data = []
+        for card in self.cards:
+            cards_data.append(card.to_dict())
+        self.undo_manager.save_state(cards_data, action_name)
+    
+    def undo(self):
+        """撤销操作"""
+        cards_data = self.undo_manager.undo()
+        if cards_data is not None:
+            self._restore_state(cards_data)
+            print("已撤销")
+    
+    def redo(self):
+        """重做操作"""
+        cards_data = self.undo_manager.redo()
+        if cards_data is not None:
+            self._restore_state(cards_data)
+            print("已重做")
+    
+    def _restore_state(self, cards_data: List[Dict]):
+        """恢复状态"""
+        from ai_reader_cards.card import KnowledgeCard
+        
+        # 清空当前场景
+        for card in self.cards[:]:
+            self.remove_card(card)
+        
+        # 恢复卡片（不触发撤销保存）
+        card_dict = {}
+        for card_data in cards_data:
+            card = KnowledgeCard(
+                card_data['id'],
+                card_data['title'],
+                card_data['question'],
+                card_data['answer'],
+                card_data['x'],
+                card_data['y']
+            )
+            card.level = card_data.get('level', 0)
+            card_dict[card_data['id']] = card
+            # 直接添加，不触发保存
+            self.addItem(card)
+            self.cards.append(card)
+            
+            # 连接信号
+            if hasattr(card, 'connection_started'):
+                card.connection_started.connect(self.start_connection)
+            if hasattr(card, 'content_changed'):
+                card.content_changed.connect(lambda: self.update())
+        
+        # 恢复父子关系
+        for card_data in cards_data:
+            if card_data.get('parent_id'):
+                parent = card_dict.get(card_data['parent_id'])
+                child = card_dict.get(card_data['id'])
+                if parent and child:
+                    child.set_parent_card(parent)
+        
+        self.undo_manager.is_undoing = False
+        self.update()
+
     # 修复：添加缺失的卡片管理方法
     def add_card(self, card):
         """添加卡片到场景"""
         self.addItem(card)
         self.cards.append(card)
+        
+        # 如果是第一个卡片，设置层级为0
+        if len(self.cards) == 1:
+            card.level = 0
+            card.parent_card = None
 
         # 连接卡片的连接信号
         if hasattr(card, 'connection_started'):
             card.connection_started.connect(self.start_connection)
+        
+        # 连接内容改变信号，用于自动更新连线
+        if hasattr(card, 'content_changed'):
+            card.content_changed.connect(lambda: self.update())
+        
+        # 如果不是撤销操作，保存状态（只在有卡片时保存）
+        if not self.undo_manager.is_undoing and len(self.cards) > 0:
+            # 延迟保存，避免频繁保存
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(100, lambda: self._save_state_for_undo("添加卡片"))
 
     def remove_card(self, card):
         """从场景移除卡片"""
@@ -582,6 +830,27 @@ class MindMapScene(QGraphicsScene):
             painter.drawLine(int(rect.left()), int(y), int(rect.right()), int(y))
             y += grid_size
 
+    def set_connection_style(self, style):
+        """设置连线样式"""
+        self.connection_style = style
+        if style in ["bezier", "smart", "gradient"]:
+            from ai_reader_cards.professional_connections import ConnectionManager
+            if self.connection_manager is None:
+                self.connection_manager = ConnectionManager()
+        elif style == "fixed":
+            from ai_reader_cards.fixed_connections import FixedConnectionManager
+            if self.fixed_connection_manager is None:
+                self.fixed_connection_manager = FixedConnectionManager()
+            self.fixed_connection_manager.set_layout_type(self.current_layout_type)
+        self.update()
+    
+    def set_layout_type(self, layout_type):
+        """设置布局类型（影响固定长度连线）"""
+        self.current_layout_type = layout_type
+        if self.fixed_connection_manager:
+            self.fixed_connection_manager.set_layout_type(layout_type)
+        self.update()
+
     def drawForeground(self, painter, rect):
         """绘制前景（连线）"""
         super().drawForeground(painter, rect)
@@ -589,9 +858,30 @@ class MindMapScene(QGraphicsScene):
         # 绘制所有父子连线
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        for card in self.cards:
-            if card.parent_card:
-                self._draw_smart_connection(painter, card.parent_card, card)
+        # 根据连线样式选择绘制方式
+        if self.connection_style == "fixed" and self.fixed_connection_manager:
+            # 使用固定长度连线
+            for card in self.cards:
+                if card.parent_card:
+                    connection = self.fixed_connection_manager.create_connection(
+                        card.parent_card, card
+                    )
+                    connection.update_path()
+                    connection.draw(painter)
+        elif self.connection_style in ["bezier", "smart", "gradient"] and self.connection_manager:
+            # 使用专业连线样式
+            for card in self.cards:
+                if card.parent_card:
+                    connection = self.connection_manager.create_connection(
+                        card.parent_card, card, self.connection_style
+                    )
+                    connection.update_path()
+                    connection.draw(painter)
+        else:
+            # 使用原有的智能连线
+            for card in self.cards:
+                if card.parent_card:
+                    self._draw_smart_connection(painter, card.parent_card, card)
 
     def _draw_smart_connection(self, painter, parent_card, child_card):
         """绘制智能连接线 - 自动选择最近的连接点"""
@@ -711,16 +1001,60 @@ class MindMapScene(QGraphicsScene):
         painter.drawPolygon(arrow)
 
     def itemChange(self, change, value):
-        """检测卡片位置变化"""
-        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
-            moved_card = self.focusItem()
-            if isinstance(moved_card, KnowledgeCard):
-                for card in self.cards:
-                    if card != moved_card and card.collidesWithItem(moved_card):
-                        moved_card.set_parent_card(card)
-                        card.add_child_card(moved_card)
-                        break
+        """检测卡片位置变化 - 场景级别的检测"""
         return super().itemChange(change, value)
+    
+    def check_auto_connect(self, moved_card):
+        """检测并自动建立父子关系"""
+        if not isinstance(moved_card, KnowledgeCard):
+            return
+        
+        # 获取移动卡片的中心位置
+        moved_center = moved_card.get_center_pos()
+        moved_bottom = moved_card.pos().y() + moved_card.CARD_HEIGHT
+        
+        # 检测是否有其他卡片在移动卡片的上方
+        best_parent = None
+        min_distance = float('inf')
+        
+        for card in self.cards:
+            if card == moved_card or not isinstance(card, KnowledgeCard):
+                continue
+            
+            # 获取卡片的边界
+            card_top = card.pos().y()
+            card_bottom = card.pos().y() + card.CARD_HEIGHT
+            card_left = card.pos().x()
+            card_right = card.pos().x() + card.CARD_WIDTH
+            
+            # 检查移动卡片是否在另一个卡片的下方（垂直方向）
+            # 并且水平方向有重叠
+            if (moved_bottom > card_bottom and  # 移动卡片在下方
+                moved_center.x() >= card_left and moved_center.x() <= card_right):  # 水平重叠
+                
+                # 计算距离（垂直距离）
+                distance = moved_bottom - card_bottom
+                
+                # 选择最近的卡片作为父节点
+                if distance < min_distance and distance < 300:  # 距离阈值
+                    min_distance = distance
+                    best_parent = card
+        
+        # 如果找到合适的父节点，建立父子关系
+        if best_parent and best_parent != moved_card.parent_card:
+            # 避免循环引用：检查移动卡片不是父节点的祖先
+            if not self._is_ancestor(moved_card, best_parent):
+                moved_card.set_parent_card(best_parent)
+                self.update()
+    
+    def _is_ancestor(self, card, potential_ancestor):
+        """检查card是否是potential_ancestor的祖先"""
+        current = potential_ancestor.parent_card
+        while current:
+            if current == card:
+                return True
+            current = current.parent_card
+        return False
 
 
 class MindMapView(QGraphicsView):

@@ -66,6 +66,7 @@ class KnowledgeCard(QGraphicsRectItem):
         self.parent_card = None
         self.child_cards = []
         self.connections = []  # 存储连接信息
+        self.level = 0  # 层级属性，第一个卡片为0
         # 修复：添加 connection_points 初始化
         self.connection_points = {}
 
@@ -74,6 +75,7 @@ class KnowledgeCard(QGraphicsRectItem):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable)
 
         # 设置卡片样式
         self.setPen(QPen(QColor(100, 100, 100), 2))
@@ -183,6 +185,148 @@ class KnowledgeCard(QGraphicsRectItem):
 
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):
+        """双击事件处理"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            # 左键双击编辑卡片
+            self.edit_card()
+            event.accept()
+        elif event.button() == Qt.MouseButton.RightButton:
+            # 右键双击删除卡片
+            if self.scene() and hasattr(self.scene(), '_save_state_for_undo'):
+                self.scene()._save_state_for_undo("删除卡片")
+                self.scene().remove_card(self)
+                self.scene().update()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def edit_card(self):
+        """编辑卡片内容"""
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit, QDialogButtonBox
+        
+        dialog = QDialog(None)
+        dialog.setWindowTitle("编辑卡片")
+        dialog.setMinimumWidth(500)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 标题输入
+        title_layout = QHBoxLayout()
+        title_layout.addWidget(QLabel("标题:"))
+        title_edit = QLineEdit(self.title_text)
+        title_layout.addWidget(title_edit)
+        layout.addLayout(title_layout)
+        
+        # 问题输入
+        question_label = QLabel("问题:")
+        layout.addWidget(question_label)
+        question_edit = QTextEdit(self.question_text)
+        question_edit.setMaximumHeight(100)
+        layout.addWidget(question_edit)
+        
+        # 答案输入
+        answer_label = QLabel("答案:")
+        layout.addWidget(answer_label)
+        answer_edit = QTextEdit(self.answer_text)
+        answer_edit.setMaximumHeight(150)
+        layout.addWidget(answer_edit)
+        
+        # 按钮
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.title_text = title_edit.text()
+            self.question_text = question_edit.toPlainText()
+            self.answer_text = answer_edit.toPlainText()
+            
+            # 更新显示
+            self.title_item.setPlainText(self._truncate_text(self.title_text, 30))
+            self.question_item.setPlainText("Q: " + self._truncate_text(self.question_text, 60))
+            self.answer_item.setPlainText("A: " + self._truncate_text(self.answer_text, 120))
+            
+            # 发送内容改变信号
+            self.content_changed.emit(self)
+            
+            if self.scene():
+                self.scene().update()
+
+    def keyPressEvent(self, event):
+        """键盘事件处理"""
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # Enter键 - 添加子节点
+            self.add_child_card()
+            event.accept()
+        elif event.key() == Qt.Key.Key_Tab:
+            # Tab键 - 添加同级节点
+            self.add_sibling_card()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+    def add_child_card(self):
+        """添加子卡片"""
+        from ai_reader_cards.card import KnowledgeCard
+        import uuid
+        
+        # 创建新卡片
+        child_card = KnowledgeCard(
+            str(uuid.uuid4()),
+            "新子卡片",
+            "问题内容",
+            "答案内容",
+            self.pos().x() + 200,
+            self.pos().y() + len(self.child_cards) * 200
+        )
+        
+        # 添加到场景
+        if self.scene():
+            self.scene().add_card(child_card)
+            child_card.set_parent_card(self)
+            self.scene().update()
+            
+            # 设置新卡片为选中状态
+            self.scene().clearSelection()
+            child_card.setSelected(True)
+            child_card.setFocus()
+
+    def add_sibling_card(self):
+        """添加同级卡片 - Tab键"""
+        from ai_reader_cards.card import KnowledgeCard
+        import uuid
+        
+        # 创建新卡片，与当前卡片同级
+        sibling_card = KnowledgeCard(
+            str(uuid.uuid4()),
+            "新同级卡片",
+            "问题内容",
+            "答案内容",
+            self.pos().x() + 200,
+            self.pos().y()
+        )
+        
+        # 设置相同的父节点和层级
+        if self.parent_card:
+            sibling_card.set_parent_card(self.parent_card)
+        else:
+            # 如果没有父节点，说明是根节点，新卡片也是根节点（层级0）
+            sibling_card.level = 0
+        
+        # 添加到场景
+        if self.scene():
+            self.scene().add_card(sibling_card)
+            self.scene().update()
+            
+            # 设置新卡片为选中状态
+            self.scene().clearSelection()
+            sibling_card.setSelected(True)
+            sibling_card.setFocus()
+
     def _truncate_text(self, text, max_length):
         """截断文本"""
         if len(text) <= max_length:
@@ -190,12 +334,27 @@ class KnowledgeCard(QGraphicsRectItem):
         return text[:max_length] + "..."
 
     def set_parent_card(self, parent):
-        """设置父卡片"""
+        """设置父卡片并更新层级"""
         if self.parent_card:
             self.parent_card.child_cards.remove(self)
         self.parent_card = parent
-        if parent and self not in parent.child_cards:
-            parent.child_cards.append(self)
+        if parent:
+            if self not in parent.child_cards:
+                parent.child_cards.append(self)
+            # 更新层级：父节点的层级+1
+            self.level = parent.level + 1
+            # 递归更新所有子节点的层级
+            self._update_children_levels()
+        else:
+            # 如果没有父节点，层级为0
+            self.level = 0
+            self._update_children_levels()
+    
+    def _update_children_levels(self):
+        """递归更新所有子节点的层级"""
+        for child in self.child_cards:
+            child.level = self.level + 1
+            child._update_children_levels()
 
     def get_center_pos(self):
         """获取卡片中心位置"""
@@ -203,6 +362,10 @@ class KnowledgeCard(QGraphicsRectItem):
             self.pos().x() + self.CARD_WIDTH / 2,
             self.pos().y() + self.CARD_HEIGHT / 2
         )
+    
+    def center_pos(self):
+        """获取卡片中心位置（用于连线系统）"""
+        return self.get_center_pos()
 
     def to_dict(self):
         """转换为字典格式用于保存"""
@@ -213,6 +376,7 @@ class KnowledgeCard(QGraphicsRectItem):
             "answer": self.answer_text,
             "x": self.pos().x(),
             "y": self.pos().y(),
+            "level": self.level,  # 保存层级
             "parent_id": self.parent_card.card_id if self.parent_card else None
         }
 
@@ -265,6 +429,9 @@ class KnowledgeCard(QGraphicsRectItem):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             # 更新连接点位置
             self.update_connection_points()
+            # 自动检测并建立父子关系
+            if self.scene() and hasattr(self.scene(), 'check_auto_connect'):
+                self.scene().check_auto_connect(self)
             # 通知场景更新连线
             if self.scene():
                 self.scene().update()

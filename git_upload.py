@@ -135,7 +135,9 @@ def main():
     
     # 6. 推送到 GitHub 主分支
     print("[6/6] 推送到 GitHub 主分支...")
-    print("注意: 使用 HTTPS 方式，可能需要输入 GitHub 用户名和密码/令牌")
+    print("注意: 使用 HTTPS 方式，需要 GitHub 认证")
+    print("如果未配置认证，请运行: python setup_github_auth.py")
+    print("或者推送时会提示输入用户名和密码（个人访问令牌）")
     print()
     
     # 确保在 main 分支
@@ -173,7 +175,7 @@ def main():
     print("上传完成！")
     print("=" * 50)
     print()
-    print(f"仓库地址: {remote_url}")
+    print(f"仓库地址: {remote_url_https}")
     print()
 
 if __name__ == "__main__":

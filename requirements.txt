@@ -1,0 +1,30 @@
+# ==================== PyQt6 核心依赖 ====================
+# 注意：在Windows上，推荐使用conda安装PyQt6和PyQt6-WebEngine以避免DLL问题
+# conda install -c conda-forge pyqt pyqtwebengine
+PyQt6>=6.0.0
+PyQt6-WebEngine>=6.0.0
+
+# ==================== AI相关 ====================
+openai>=1.0.0
+
+# ==================== 文件处理 ====================
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+
+# ==================== Markdown相关 ====================
+markdown>=3.4.0
+Pygments>=2.15.0
+Markups[markdown]>=4.0.0  # ReText使用的Markdown渲染库
+
+# ==================== 工具库 ====================
+pyperclip>=1.8.0
+requests>=2.31.0
+tqdm>=4.66.0
+matplotlib>=3.7.0
+weasyprint>=60.0
+jinja2>=3.1.0
+
+# ==================== Web框架 ====================
+flask>=2.3.0
+flask-cors>=4.0.0
+

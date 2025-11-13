@@ -79,50 +79,71 @@ def main():
         print("Git 仓库已存在")
     print()
     
-    # 3. 检查并设置远程仓库
+    # 3. 检查并设置远程仓库（使用 HTTPS）
     print("[3/6] 检查远程仓库...")
-    remote_url = "git@github.com:schrodinger12138/AIMind_Card.git"
+    remote_url_https = "https://github.com/schrodinger12138/AIMind_Card.git"
     success, output, _ = run_command("git remote get-url origin", check=False)
     if not success:
         print("添加远程仓库...")
-        success, _, _ = run_command(f"git remote add origin {remote_url}")
+        success, _, _ = run_command(f"git remote add origin {remote_url_https}")
         if success:
             print("远程仓库已添加")
         else:
             print("错误: 添加远程仓库失败")
             sys.exit(1)
     else:
-        print("更新远程仓库地址...")
-        success, _, _ = run_command(f"git remote set-url origin {remote_url}")
+        print("更新远程仓库地址（使用 HTTPS）...")
+        success, _, _ = run_command(f"git remote set-url origin {remote_url_https}")
         if success:
-            print("远程仓库地址已更新")
+            print("远程仓库地址已更新为 HTTPS")
         else:
             print("警告: 更新远程仓库地址失败，继续...")
     print()
     
-    # 4. 添加所有文件到暂存区
+    # 4. 添加所有文件到暂存区（包括 submodule 更新）
     print("[4/6] 添加所有文件到暂存区...")
     success, _, _ = run_command("git add .")
     if not success:
         print("错误: 添加文件失败")
         sys.exit(1)
-    print("文件已添加到暂存区")
+    
+    # 检查是否有未暂存的更改
+    success, output, _ = run_command("git status --porcelain", check=False)
+    if output.strip():
+        print("文件已添加到暂存区")
+        # 如果有 submodule 更改，尝试添加
+        if "modified content" in output or "untracked content" in output:
+            print("检测到 submodule 更改，尝试添加...")
+            run_command("git add -A", check=False)
+    else:
+        print("没有需要添加的文件")
     print()
     
     # 5. 提交更改
     print("[5/6] 提交更改...")
-    success, _, _ = run_command('git commit -m "Update: AI Mind Card project"', check=False)
-    if success:
-        print("更改已提交")
+    # 先检查是否有需要提交的内容
+    success, output, _ = run_command("git status --porcelain", check=False)
+    if output.strip() and ("M " in output or "A " in output or "??" in output):
+        success, _, _ = run_command('git commit -m "Update: AI Mind Card project"', check=False)
+        if success:
+            print("更改已提交")
+        else:
+            print("警告: 提交失败，继续尝试推送...")
     else:
-        print("警告: 提交可能失败（可能是没有更改或已是最新）")
+        print("没有需要提交的更改（可能已是最新）")
     print()
     
     # 6. 推送到 GitHub 主分支
     print("[6/6] 推送到 GitHub 主分支...")
-    print("注意: 如果这是第一次推送，可能需要设置 SSH 密钥")
-    print("如果遇到权限问题，请检查 SSH 密钥配置")
+    print("注意: 使用 HTTPS 方式，可能需要输入 GitHub 用户名和密码/令牌")
     print()
+    
+    # 确保在 main 分支
+    success, branch_output, _ = run_command("git branch --show-current", check=False)
+    current_branch = branch_output.strip() if success else "main"
+    if current_branch != "main":
+        print(f"当前分支: {current_branch}，切换到 main 分支...")
+        run_command("git branch -M main", check=False)
     
     # 先尝试推送到 main 分支
     success, _, _ = run_command("git push -u origin main", check=False)
@@ -134,13 +155,16 @@ def main():
             print()
             print("=" * 50)
             print("推送失败！可能的原因：")
-            print("1. SSH 密钥未配置")
+            print("1. 需要 GitHub 认证（用户名和密码/个人访问令牌）")
             print("2. 网络连接问题")
             print("3. 仓库权限问题")
+            print("4. 代理配置问题")
             print()
-            print("请检查：")
-            print(f"- SSH 密钥: ssh -T git@github.com")
-            print(f"- 远程地址: git remote -v")
+            print("解决方案：")
+            print("1. 如果使用代理，请确保代理正常工作")
+            print("2. 取消代理: git config --global --unset http.proxy")
+            print("3. 使用个人访问令牌代替密码")
+            print("4. 检查远程地址: git remote -v")
             print("=" * 50)
             sys.exit(1)
     

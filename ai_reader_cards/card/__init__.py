@@ -50,6 +50,22 @@ try:
 except ImportError:
     UndoManager = None
 
+try:
+    from .node_shapes import NodeShapeFactory
+except ImportError:
+    NodeShapeFactory = None
+
+try:
+    from .node_icons import IconManager
+except ImportError:
+    IconManager = None
+
+try:
+    from .node_tags import TagManager, TagItem
+except ImportError:
+    TagManager = None
+    TagItem = None
+
 __all__ = [
     'KnowledgeCard',
     'CardEditDialog',
@@ -67,5 +83,9 @@ __all__ = [
     'SmartConnection',
     'GradientConnection',
     'UndoManager',
+    'NodeShapeFactory',
+    'IconManager',
+    'TagManager',
+    'TagItem',
 ]
 

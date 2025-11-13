@@ -32,6 +32,14 @@ class CardTreeNode:
         # 节点内容相关
         self.image_path = ""  # 图片路径
         self.image_placement = "top"  # 图片位置：top/bottom/left/right
+        # 节点形状
+        self.shape = "rectangle"  # 节点形状：rectangle/rounded_rectangle/ellipse/circle/diamond
+        # 节点图标
+        self.icon_category = ""  # 图标分类
+        self.icon_name = ""  # 图标名称
+        # 节点标签
+        self.tags = []  # 标签列表
+        self.tag_colors = []  # 标签颜色索引列表
 
     def add_child(self, node):
         node.parent = self
@@ -62,6 +70,11 @@ class CardTreeNode:
             "associative_line_text": getattr(self, 'associative_line_text', {}),
             "image_path": getattr(self, 'image_path', ""),
             "image_placement": getattr(self, 'image_placement', "top"),
+            "shape": getattr(self, 'shape', "rectangle"),
+            "icon_category": getattr(self, 'icon_category', ""),
+            "icon_name": getattr(self, 'icon_name', ""),
+            "tags": getattr(self, 'tags', []),
+            "tag_colors": getattr(self, 'tag_colors', []),
             "children": [c.to_dict() for c in self.children]
         }
 
@@ -86,6 +99,11 @@ class CardTreeNode:
         node.associative_line_text = data.get("associative_line_text", {})
         node.image_path = data.get("image_path", "")
         node.image_placement = data.get("image_placement", "top")
+        node.shape = data.get("shape", "rectangle")
+        node.icon_category = data.get("icon_category", "")
+        node.icon_name = data.get("icon_name", "")
+        node.tags = data.get("tags", [])
+        node.tag_colors = data.get("tag_colors", [])
         
         for child_data in data.get("children", []):
             child_node = CardTreeNode.from_dict(child_data)
@@ -143,6 +161,11 @@ class CardTreeNode:
         new_node.associative_line_text = self.associative_line_text.copy() if hasattr(self, 'associative_line_text') else {}
         new_node.image_path = self.image_path if hasattr(self, 'image_path') else ""
         new_node.image_placement = self.image_placement if hasattr(self, 'image_placement') else "top"
+        new_node.shape = self.shape if hasattr(self, 'shape') else "rectangle"
+        new_node.icon_category = self.icon_category if hasattr(self, 'icon_category') else ""
+        new_node.icon_name = self.icon_name if hasattr(self, 'icon_name') else ""
+        new_node.tags = self.tags.copy() if hasattr(self, 'tags') else []
+        new_node.tag_colors = self.tag_colors.copy() if hasattr(self, 'tag_colors') else []
 
         for child in self.children:
             new_child = child.duplicate()

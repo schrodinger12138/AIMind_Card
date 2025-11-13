@@ -65,15 +65,19 @@ class CardMindMapScene(QGraphicsScene):
         # 不自动应用布局，需要手动调用 apply_layout()
 
     def apply_layout(self):
-        """应用布局算法（参考 madmap 的 apply_layout）"""
+        """应用布局算法（参考 madmap 的 apply_layout），支持动态节点大小"""
         root_node = self.get_root_node()
         if not root_node:
             return
         
-        # 应用布局
+        # 应用布局，传入 visual_nodes 以支持动态大小
         layout_func = getattr(self.layout_engine, self.current_layout_type, None)
         if layout_func:
-            layout_func(root_node)
+            # 传递 visual_nodes 参数以支持动态节点大小计算
+            if self.current_layout_type in ['mind_map', 'logical', 'timeline', 'fishbone', 'auto_arrange']:
+                layout_func(root_node, visual_nodes=self.visual_nodes)
+            else:
+                layout_func(root_node)
             self.refresh_positions()
             self.update()
 

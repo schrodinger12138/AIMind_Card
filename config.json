@@ -1,0 +1,32 @@
+{
+  "api": {
+    "openai_api_key": "sk-lwkQzJYwYdJwbQ4DaAlM3Ti6pgMCzEgztBjREyOlYFPLPDQP",
+    "openai_base_url": "https://api.chatanywhere.tech/v1",
+    "model": "gpt-3.5-turbo",
+    "deepseek_api_key": "",
+    "deepseek_base_url": "https://api.deepseek.com/v1/chat/completions",
+    "deepseek_model": "deepseek-chat"
+  },
+  "proxy": {
+    "use_proxy": false,
+    "proxies": {
+      "http": null,
+      "https": null
+    },
+    "when_to_use_proxy": [
+      "translate",
+      "api_request"
+    ]
+  },
+  "translation": {
+    "default_target_language": "zh",
+    "preserve_markdown": true,
+    "max_token_limit": 2048
+  },
+  "layout": {
+    "default": "logical"
+  },
+  "connection": {
+    "default": "bezier"
+  }
+}

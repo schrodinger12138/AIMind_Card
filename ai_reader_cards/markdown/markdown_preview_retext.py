@@ -76,12 +76,23 @@ class MarkdownPreviewReText(QWidget):
         self.web_view = QWebEngineView()
         
         # 设置WebEngine设置（参考 ReTextWebEnginePreview.__init__）
-        settings = self.web_view.settings()
-        settings.setDefaultTextEncoding('utf-8')
-        settings.setAttribute(
-            settings.WebAttribute.LocalContentCanAccessRemoteUrls, 
-            True
-        )
+        try:
+            from PyQt6.QtWebEngineCore import QWebEngineSettings
+            settings = self.web_view.settings()
+            settings.setDefaultTextEncoding('utf-8')
+            # PyQt6 中使用 QWebEngineSettings.WebAttribute
+            settings.setAttribute(
+                QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, 
+                True
+            )
+        except (ImportError, AttributeError) as e:
+            # 如果导入失败或属性不存在，跳过设置
+            print(f"警告: 无法设置 WebEngine 属性: {e}")
+            settings = self.web_view.settings()
+            try:
+                settings.setDefaultTextEncoding('utf-8')
+            except:
+                pass
         
         layout.addWidget(self.web_view)
         
@@ -345,14 +356,19 @@ class MarkdownPreviewReText(QWidget):
         if not self.web_view:
             return
         
-        settings = self.web_view.settings()
-        settings.setFontFamily(
-            settings.FontFamily.StandardFont,
-            font.family()
-        )
-        from PyQt6.QtGui import QFontInfo
-        settings.setFontSize(
-            settings.FontSize.DefaultFontSize,
-            QFontInfo(font).pixelSize()
-        )
+        try:
+            from PyQt6.QtWebEngineCore import QWebEngineSettings
+            settings = self.web_view.settings()
+            settings.setFontFamily(
+                QWebEngineSettings.FontFamily.StandardFont,
+                font.family()
+            )
+            from PyQt6.QtGui import QFontInfo
+            settings.setFontSize(
+                QWebEngineSettings.FontSize.DefaultFontSize,
+                QFontInfo(font).pixelSize()
+            )
+        except (ImportError, AttributeError) as e:
+            # 如果设置失败，跳过
+            print(f"警告: 无法设置字体: {e}")
 

@@ -3,7 +3,7 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QTextEdit, QLabel, QMessageBox, QCheckBox,
-                             QDialog, QComboBox)
+                             QDialog, QComboBox, QSplitter, QPlainTextEdit)
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
@@ -31,27 +31,40 @@ class InputPanel(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
+        layout.setSpacing(2)  # 最小间距
+        layout.setContentsMargins(2, 2, 2, 2)  # 最小边距
 
-        # 标题和文件控制栏
+        # 标题和文件控制栏（超紧凑布局）
         title_layout = QHBoxLayout()
-        title = QLabel("📚 文件阅读区")
-        title.setStyleSheet("font-size: 14px; font-weight: bold; padding: 5px;")
+        title_layout.setSpacing(2)  # 最小间距
+        title_layout.setContentsMargins(2, 1, 2, 1)  # 最小边距（上下1px）
+        
+        title = QLabel("文件")
+        title.setStyleSheet("font-size: 10px; font-weight: bold; padding: 0px; margin: 0px;")
+        title.setMaximumHeight(22)  # 限制高度
         title_layout.addWidget(title)
 
-        # 文件操作按钮
-        open_file_btn = QPushButton("📂 打开文件")
+        # 文件操作按钮（超紧凑）
+        open_file_btn = QPushButton("打开")
+        open_file_btn.setMaximumHeight(22)  # 更小的高度
+        open_file_btn.setMinimumHeight(22)
+        open_file_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
         open_file_btn.clicked.connect(self._open_file)
         title_layout.addWidget(open_file_btn)
 
-        clear_file_btn = QPushButton("🗑️ 清空")
+        clear_file_btn = QPushButton("清空")
+        clear_file_btn.setMaximumHeight(22)
+        clear_file_btn.setMinimumHeight(22)
+        clear_file_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
         clear_file_btn.clicked.connect(self._clear_content)
         title_layout.addWidget(clear_file_btn)
 
         title_layout.addStretch()
 
-        # 文件信息标签
+        # 文件信息标签（超紧凑）
         self.file_info_label = QLabel("未打开文件")
-        self.file_info_label.setStyleSheet("color: gray; font-size: 11px;")
+        self.file_info_label.setStyleSheet("color: gray; font-size: 8px; padding: 0px; margin: 0px;")
+        self.file_info_label.setMaximumHeight(22)
         title_layout.addWidget(self.file_info_label)
 
         layout.addLayout(title_layout)
@@ -60,7 +73,6 @@ class InputPanel(QWidget):
         # 优先使用ReText方式的预览（如果可用）
         try:
             from ai_reader_cards.markdown.markdown_preview_retext import MarkdownPreviewReText
-            from PyQt6.QtWidgets import QSplitter, QPlainTextEdit
             from PyQt6.QtCore import Qt as QtCore
             
             # 创建分割器：左侧编辑，右侧预览
@@ -79,19 +91,23 @@ class InputPanel(QWidget):
                 "6. 实时预览在右侧显示（使用ReText渲染引擎）"
             )
             
-            # 右侧：预览区（使用ReText方式）
+            # 只添加编辑区，预览区将在主窗口中单独管理
+            layout.addWidget(self.text_input)
+            
+            # 创建预览区但不添加到布局中（将在主窗口中单独管理）
             self.preview = MarkdownPreviewReText()
             
-            splitter.addWidget(self.text_input)
-            splitter.addWidget(self.preview)
-            splitter.setStretchFactor(0, 1)
-            splitter.setStretchFactor(1, 1)
-            splitter.setSizes([400, 400])
+            # 创建生成卡片和翻译按钮（将在主窗口中添加到预览区上方）
+            self.generate_btn = QPushButton("生成卡片")
+            self.generate_btn.clicked.connect(self._generate_card_from_selection)
+            self.generate_btn.setEnabled(False)
+            
+            self.translate_btn = QPushButton("翻译")
+            self.translate_btn.setEnabled(False)
+            self.translate_btn.clicked.connect(self._show_translate_dialog)
             
             # 连接文本变化信号到预览更新
             self.text_input.textChanged.connect(self._update_preview)
-            
-            layout.addWidget(splitter)
             self.is_markdown_mode = True
             self.use_preview = True
             self.preview_type = "retext"  # 标记使用ReText方式
@@ -126,47 +142,9 @@ class InputPanel(QWidget):
         self.setAcceptDrops(True)
         if hasattr(self, 'text_input'):
             self.text_input.setAcceptDrops(True)
-
-        # 文本操作工具栏
-        text_toolbar = QHBoxLayout()
-
-        copy_btn = QPushButton("📋 复制")
-        copy_btn.clicked.connect(lambda: self.text_operation_requested.emit("copy"))
-        text_toolbar.addWidget(copy_btn)
-
-        paste_btn = QPushButton("📄 粘贴")
-        paste_btn.clicked.connect(lambda: self.text_operation_requested.emit("paste"))
-        text_toolbar.addWidget(paste_btn)
-
-        cut_btn = QPushButton("✂️ 剪切")
-        cut_btn.clicked.connect(lambda: self.text_operation_requested.emit("cut"))
-        text_toolbar.addWidget(cut_btn)
-
-        select_all_btn = QPushButton("🔍 全选")
-        select_all_btn.clicked.connect(lambda: self.text_operation_requested.emit("select_all"))
-        text_toolbar.addWidget(select_all_btn)
-
-        text_toolbar.addStretch()
-        layout.addLayout(text_toolbar)
-
-        # 生成卡片和翻译按钮
-        button_layout = QHBoxLayout()
         
-        self.generate_btn = QPushButton("✨ 生成卡片 (Space)")
-        self.generate_btn.setStyleSheet("font-size: 14px; padding: 10px;")
-        self.generate_btn.clicked.connect(self._generate_card_from_selection)
-        self.generate_btn.setEnabled(False)
-        button_layout.addWidget(self.generate_btn)
-        
-        # 翻译按钮
-        translate_btn = QPushButton("🌐 翻译")
-        translate_btn.setStyleSheet("font-size: 14px; padding: 10px;")
-        translate_btn.setEnabled(False)
-        translate_btn.clicked.connect(self._show_translate_dialog)
-        button_layout.addWidget(translate_btn)
-        self.translate_btn = translate_btn
-        
-        layout.addLayout(button_layout)
+        # 注意：按钮已经移到预览区域上方（在 Markdown 预览模式中）
+        # 如果没有预览模式，需要在这里添加按钮（但通常不会进入这个分支）
 
     def _open_file(self):
         """打开文件"""

@@ -8,6 +8,14 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QPainterPath, QPainter, QPen, QBrush, QColor, QLinearGradient, QRadialGradient
 from PyQt6.QtCore import Qt
 
+# 延迟导入增强连线样式，避免循环依赖
+def _get_enhanced_connections():
+    try:
+        from .enhanced_connections import HandDrawnConnection, RainbowConnection, AnimatedConnection
+        return HandDrawnConnection, RainbowConnection, AnimatedConnection
+    except ImportError:
+        return None, None, None
+
 
 class CardConnectionManager:
     """卡片连线管理器 - 基于 madmap 的 ConnectionManager"""
@@ -17,13 +25,21 @@ class CardConnectionManager:
         self.animation_enabled = True
 
     def create_connection(self, parent_node, child_node, connection_type="bezier"):
-        """创建专业连线"""
+        """创建专业连线，支持多种样式"""
+        HandDrawnConnection, RainbowConnection, AnimatedConnection = _get_enhanced_connections()
+        
         if connection_type == "bezier":
             return BezierConnection(parent_node, child_node)
         elif connection_type == "smart":
             return SmartConnection(parent_node, child_node)
         elif connection_type == "gradient":
             return GradientConnection(parent_node, child_node)
+        elif connection_type == "hand_drawn" and HandDrawnConnection:
+            return HandDrawnConnection(parent_node, child_node)
+        elif connection_type == "rainbow" and RainbowConnection:
+            return RainbowConnection(parent_node, child_node)
+        elif connection_type == "animated" and AnimatedConnection:
+            return AnimatedConnection(parent_node, child_node)
         else:
             return BezierConnection(parent_node, child_node)
 
@@ -51,17 +67,23 @@ class ProfessionalConnection:
             self.child_node.pos().x(), self.child_node.pos().y()
         )
 
-        # 获取宽高
+        # 获取宽高（使用动态大小）
         try:
-            pw = self.parent_node.WIDTH
-            ph = self.parent_node.HEIGHT
+            if hasattr(self.parent_node, 'get_actual_size'):
+                pw, ph = self.parent_node.get_actual_size()
+            else:
+                pw = self.parent_node.WIDTH
+                ph = self.parent_node.HEIGHT
         except Exception:
             br = self.parent_node.boundingRect()
             pw, ph = br.width(), br.height()
 
         try:
-            cw = self.child_node.WIDTH
-            ch = self.child_node.HEIGHT
+            if hasattr(self.child_node, 'get_actual_size'):
+                cw, ch = self.child_node.get_actual_size()
+            else:
+                cw = self.child_node.WIDTH
+                ch = self.child_node.HEIGHT
         except Exception:
             br2 = self.child_node.boundingRect()
             cw, ch = br2.width(), br2.height()
@@ -69,12 +91,14 @@ class ProfessionalConnection:
         dx = child_center.x() - parent_center.x()
         dy = child_center.y() - parent_center.y()
 
-        # 计算连接点
+        # 计算连接点 - 从左到右：父节点右边 -> 子节点左边
         if abs(dx) > abs(dy):  # 水平方向为主
-            if dx > 0:  # 子在父右侧
+            if dx > 0:  # 子在父右侧（正常情况：从左到右）
+                # 从父节点右边开始，到子节点左边结束
                 start = QPointF(parent_center.x() + pw / 2, parent_center.y())
                 end = QPointF(child_center.x() - cw / 2, child_center.y())
-            else:  # 子在父左侧
+            else:  # 子在父左侧（反向情况）
+                # 从父节点左边开始，到子节点右边结束
                 start = QPointF(parent_center.x() - pw / 2, parent_center.y())
                 end = QPointF(child_center.x() + cw / 2, child_center.y())
         else:  # 垂直方向为主

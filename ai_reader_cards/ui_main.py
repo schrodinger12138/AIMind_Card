@@ -3,7 +3,8 @@
 
 import sys
 import os
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSplitter, QStatusBar, QMessageBox
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                             QSplitter, QStatusBar, QMessageBox, QPushButton, QLabel)
 from PyQt6.QtCore import Qt, QTimer
 
 # 导入新的UI组件
@@ -74,12 +75,97 @@ class MainWindow(QMainWindow):
         self.search_toolbar.setVisible(False)
         self.alignment_toolbar.setVisible(False)
 
-        # 创建分割器 - 左侧输入面板，右侧思维导图
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.input_panel)
-        splitter.addWidget(self.mindmap_panel)
-        splitter.setSizes([400, 1000])
-        main_layout.addWidget(splitter)
+        # 创建三层分割器布局：
+        # 左侧：文本编辑区（可折叠到最小）
+        # 中间：Markdown预览区（带按钮栏）
+        # 右侧：思维导图区
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # 左侧：文本编辑区（从输入面板中提取）
+        # 输入面板现在只包含编辑区，直接添加
+        main_splitter.addWidget(self.input_panel)
+        
+        # 中间：创建预览容器（包含按钮栏和预览区）
+        preview_container = QWidget()
+        preview_layout = QVBoxLayout(preview_container)
+        preview_layout.setSpacing(2)
+        preview_layout.setContentsMargins(2, 2, 2, 2)
+        
+        # 按钮栏（放在预览区上方）
+        button_toolbar = QHBoxLayout()
+        button_toolbar.setSpacing(2)
+        button_toolbar.setContentsMargins(2, 1, 2, 1)
+        
+        # 文本操作按钮
+        copy_btn = QPushButton("复制")
+        copy_btn.setMaximumHeight(22)
+        copy_btn.setMinimumHeight(22)
+        copy_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+        copy_btn.clicked.connect(lambda: self._handle_text_operation("copy"))
+        button_toolbar.addWidget(copy_btn)
+
+        paste_btn = QPushButton("粘贴")
+        paste_btn.setMaximumHeight(22)
+        paste_btn.setMinimumHeight(22)
+        paste_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+        paste_btn.clicked.connect(lambda: self._handle_text_operation("paste"))
+        button_toolbar.addWidget(paste_btn)
+
+        cut_btn = QPushButton("剪切")
+        cut_btn.setMaximumHeight(22)
+        cut_btn.setMinimumHeight(22)
+        cut_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+        cut_btn.clicked.connect(lambda: self._handle_text_operation("cut"))
+        button_toolbar.addWidget(cut_btn)
+
+        select_all_btn = QPushButton("全选")
+        select_all_btn.setMaximumHeight(22)
+        select_all_btn.setMinimumHeight(22)
+        select_all_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+        select_all_btn.clicked.connect(lambda: self._handle_text_operation("select_all"))
+        button_toolbar.addWidget(select_all_btn)
+
+        button_toolbar.addStretch()
+        
+        # 生成卡片和翻译按钮
+        if hasattr(self.input_panel, 'generate_btn'):
+            self.input_panel.generate_btn.setMaximumHeight(22)
+            self.input_panel.generate_btn.setMinimumHeight(22)
+            self.input_panel.generate_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+            button_toolbar.addWidget(self.input_panel.generate_btn)
+        
+        if hasattr(self.input_panel, 'translate_btn'):
+            self.input_panel.translate_btn.setMaximumHeight(22)
+            self.input_panel.translate_btn.setMinimumHeight(22)
+            self.input_panel.translate_btn.setStyleSheet("font-size: 9px; padding: 1px 4px; margin: 0px;")
+            button_toolbar.addWidget(self.input_panel.translate_btn)
+        
+        preview_layout.addLayout(button_toolbar)
+        
+        # 预览区（从输入面板获取）
+        if hasattr(self.input_panel, 'preview'):
+            preview_layout.addWidget(self.input_panel.preview)
+        else:
+            # 如果没有预览区，创建占位符
+            placeholder = QLabel("Markdown预览区")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            preview_layout.addWidget(placeholder)
+        
+        # 右侧：思维导图面板
+        main_splitter.addWidget(preview_container)
+        main_splitter.addWidget(self.mindmap_panel)
+        
+        # 设置比例：
+        # 左侧编辑区：默认折叠到50px（可折叠）
+        # 中间预览区：50%
+        # 右侧思维导图：50%
+        main_splitter.setStretchFactor(0, 0)  # 编辑区不拉伸
+        main_splitter.setStretchFactor(1, 1)  # 预览区拉伸
+        main_splitter.setStretchFactor(2, 1)  # 思维导图拉伸
+        main_splitter.setSizes([50, 700, 700])  # 编辑区最小化，预览区和思维导图各50%
+        main_splitter.setChildrenCollapsible(True)  # 允许折叠编辑区
+        
+        main_layout.addWidget(main_splitter)
 
         # 状态栏
         self.status_bar = QStatusBar()

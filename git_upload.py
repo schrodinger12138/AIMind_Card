@@ -36,6 +36,21 @@ def main():
     print("=" * 50)
     print()
     
+    # 检查代理配置
+    print("检查 Git 代理配置...")
+    proxy_check = subprocess.run(
+        "git config --global --get http.proxy",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    if proxy_check.returncode == 0 and proxy_check.stdout.strip():
+        print(f"当前 HTTP 代理: {proxy_check.stdout.strip()}")
+    else:
+        print("未配置 HTTP 代理")
+        print("提示: 如果需要使用代理，请先运行 setup_git_proxy_7898.py")
+    print()
+    
     # 切换到项目目录
     project_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(project_dir)
